@@ -9,7 +9,7 @@ Vim modeline parsing module.
 
 >>> from pprint import pprint
 >>> p = ModelineParser()
->>> pprint(p.parse_line('// vi:syntax=perl:fileencoding=utf8'))
+>>> pprint(p.parse_line('// vi:syntax=perl:fileencoding=utf8:'))
 {'fileencoding': 'utf8', 'syntax': 'perl'}
 >>> pprint(p.parse_line('vi:syntax=perl'))
 {'syntax': 'perl'}
@@ -108,7 +108,7 @@ class ModelineParser(object):
 
 	_option_split_re = re.compile(r'''
 		# either space or : but not preceded by a backslash.
-		(?<! \\ ) [:\s]
+		(?<! \\ ) [:\s]+
 	''', re.VERBOSE)
 
 	_option_unescape_re = re.compile(r'''
@@ -130,6 +130,10 @@ class ModelineParser(object):
 			for o in re.split(self._option_split_re, m.group('options')):
 				kv = o.split('=', 1)
 				key = kv[0]
+
+				if not key:
+					continue
+
 				if len(kv) > 1:
 					value = self._option_unescape_re.sub(r'\1', kv[1])
 				else:
