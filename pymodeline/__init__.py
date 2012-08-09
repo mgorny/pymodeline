@@ -19,6 +19,14 @@ Vim modeline parsing module.
 {}
 >>> pprint(p.parse_line('#vim:syntax=python'))
 {}
+>>> pprint(p.parse_line('/* vim:set syntax=perl fileencoding=utf8 : */'))
+{'fileencoding': 'utf8', 'syntax': 'perl'}
+>>> pprint(p.parse_line('// vim:se syntax=python:fileencoding=utf8'))
+{'syntax': 'python'}
+>>> pprint(p.parse_line('<!-- vim:se syntax=python fileencoding=utf8:'))
+{'fileencoding': 'utf8', 'syntax': 'python'}
+>>> pprint(p.parse_line('# vim:se syntax=python fileencoding=utf8'))
+{}
 """
 
 import re
@@ -92,7 +100,7 @@ class ModelineParser(object):
 
 		# vi: or vim: either on start-of-line or following whitespace.
 		(?:
-			(?: .*? \s+ )? (?: vi | vim):
+			(?: .*? \s+ )? (?: vi m? ):
 		# or ex: following whitespace.
 			| .*? \s+ ex:
 		)
@@ -100,12 +108,45 @@ class ModelineParser(object):
 		# an optional whitespace.
 		\s*
 
+		# but no 'se' or 'set' as that would engage form2 matching.
+		# we need to check that explicitly to avoid treating
+		# unterminated form2 as form1.
+		(?! se t? \s)
+
 		# the remaining part of the line contains options then.
 		(?P<options> .* )
 
 		$
 	''', re.VERBOSE)
 
+	_form2_re = re.compile(r'''
+		^
+
+		# vi: or vim: either on start-of-line or following whitespace.
+		(?:
+			(?: .*? \s+ )? (?: vi m? ):
+		# or ex: following whitespace.
+			| .*? \s+ ex:
+		)
+
+		# an optional whitespace.
+		\s*
+
+		se t?
+
+		\s+
+
+		# the remaining part of the line contains options then.
+		(?P<options>
+			(?: [^:] | : (?<= \\ ) )+
+		)
+
+		# and they *must* end with a :
+		:
+	''', re.VERBOSE)
+
+	# it can be common to both forms since in form2 unescaped :
+	# acts as end-of-modeline.
 	_option_split_re = re.compile(r'''
 		# either space or : but not preceded by a backslash.
 		(?<! \\ ) [:\s]+
@@ -125,7 +166,7 @@ class ModelineParser(object):
 
 		ret = {}
 
-		m = self._form1_re.match(l)
+		m = self._form2_re.match(l) or self._form1_re.match(l)
 		if m:
 			for o in re.split(self._option_split_re, m.group('options')):
 				kv = o.split('=', 1)
