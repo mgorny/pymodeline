@@ -4,6 +4,23 @@
 # (c) 2012 Michał Górny <mgorny@gentoo.org>
 # Released under the terms of the 2-clause BSD license.
 
+"""
+Vim modeline parsing module.
+
+>>> from pprint import pprint
+>>> p = ModelineParser()
+>>> pprint(p.parse_line('// vi:syntax=perl:fileencoding=utf8'))
+{'fileencoding': 'utf8', 'syntax': 'perl'}
+>>> pprint(p.parse_line('vi:syntax=perl'))
+{'syntax': 'perl'}
+>>> pprint(p.parse_line('# ex:syntax=perl fileencoding=utf8:textwidth=40'))
+{'fileencoding': 'utf8', 'syntax': 'perl', 'textwidth': '40'}
+>>> pprint(p.parse_line('ex:syntax=perl'))
+{}
+>>> pprint(p.parse_line('#vim:syntax=python'))
+{}
+"""
+
 import re
 
 class ModelineParser(object):
