@@ -33,9 +33,53 @@ Vim modeline parsing module.
 {}
 >>> pprint(p.parse_line('vim<100:syntax=perl'))
 {}
+>>> pprint(p.parse_line('vim:syn=perl:ft=python:tw=80'))
+{'filetype': 'python', 'syntax': 'perl', 'textwidth': '80'}
+>>> pprint(p.parse_line('vim:noai:ari'))
+{'allowrevins': True, 'autoindent': False}
 """
 
 import re
+
+from optionlist import boolean_options, option_mapping, option_list
+
+class ModelineDict(dict):
+	"""
+	Dict wrapper mapping option names.
+
+	The short option names will be mapped to the long ones.
+	Additionally, boolean variables will be mapped from 'no*' variants
+	to the positive ones, and when queried -- the other way.
+	"""
+
+	@staticmethod
+	def _get_long_option(key):
+		if key.startswith('no'):
+			key = key[2:]
+		if key in option_mapping:
+			key = option_mapping[key]
+		elif key not in option_list:
+			raise KeyError('Invalid vim option: %s' % key)
+		return key
+
+	def __getitem__(self, key):
+		return dict.__getitem__(self, self._get_long_option(key))
+
+	def __setitem__(self, key, val):
+		long_key = self._get_long_option(key)
+
+		if long_key in boolean_options:
+			if val is not None:
+				raise ValueError('Boolean option has a value: %s=%s'
+						% (key, val))
+			val = not key.startswith('no')
+		elif val is None:
+			raise ValueError('Non-boolean option lacks value: %s' % key)
+
+		return dict.__setitem__(self, long_key, val)
+
+	def __hasitem__(self, key):
+		return dict.__hasitem__(self, self._get_long_option(key))
 
 class ModelineParser(object):
 	"""
@@ -90,7 +134,7 @@ class ModelineParser(object):
 		# Note: 'modelines' option in modeline does not affect modeline
 		# parsing, so we can treat that as const.
 		mls = self._modelines
-		ret = dict()
+		ret = ModelineDict()
 
 		# XXX: replace it with something more efficient. And prevent
 		# parsing the same lines twice.
@@ -194,7 +238,7 @@ class ModelineParser(object):
 		Returns a dict with options and their values.
 		"""
 
-		ret = {}
+		ret = ModelineDict()
 
 		m = self._form2_re.match(l) or self._form1_re.match(l)
 		if m:
@@ -224,7 +268,7 @@ class ModelineParser(object):
 				if len(kv) > 1:
 					value = self._option_unescape_re.sub(r'\1', kv[1])
 				else:
-					value = True
+					value = None
 
 				ret[key] = value
 
