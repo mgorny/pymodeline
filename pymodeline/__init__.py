@@ -27,6 +27,12 @@ Vim modeline parsing module.
 {'fileencoding': 'utf8', 'syntax': 'python'}
 >>> pprint(p.parse_line('# vim:se syntax=python fileencoding=utf8'))
 {}
+>>> pprint(p.parse_line('vim>0:syntax=perl'))
+{'syntax': 'perl'}
+>>> pprint(p.parse_line('vi>0:syntax=perl'))
+{}
+>>> pprint(p.parse_line('vim<100:syntax=perl'))
+{}
 """
 
 import re
@@ -98,12 +104,24 @@ class ModelineParser(object):
 	_form1_re = re.compile(r'''
 		^
 
-		# vi: or vim: either on start-of-line or following whitespace.
 		(?:
-			(?: .*? \s+ )? (?: vi m? ):
-		# or ex: following whitespace.
-			| .*? \s+ ex:
+			# vi: or vim: either on start-of-line or following
+			# whitespace.
+			(?: .*? \s+ )?
+			(?: vi (?P<has_vim> m )? )
+
+			# or ex: following whitespace.
+			| .*? \s+ ex
 		)
+
+		# optionally, a version requirement
+		# but only for 'vim'
+		(?(has_vim)
+			(?P<version_op> [<=>] )?
+			(?P<version_no> \d* )
+		)
+
+		:
 
 		# an optional whitespace.
 		\s*
@@ -122,12 +140,24 @@ class ModelineParser(object):
 	_form2_re = re.compile(r'''
 		^
 
-		# vi: or vim: either on start-of-line or following whitespace.
 		(?:
-			(?: .*? \s+ )? (?: vi m? ):
-		# or ex: following whitespace.
-			| .*? \s+ ex:
+			# vi: or vim: either on start-of-line or following
+			# whitespace.
+			(?: .*? \s+ )?
+			(?: vi (?P<has_vim> m )? )
+
+			# or ex: following whitespace.
+			| .*? \s+ ex
 		)
+
+		# optionally, a version requirement
+		# but only for 'vim'
+		(?(has_vim)
+			(?P<version_op> [<=>] )?
+			(?P<version_no> \d* )
+		)
+
+		:
 
 		# an optional whitespace.
 		\s*
@@ -168,6 +198,22 @@ class ModelineParser(object):
 
 		m = self._form2_re.match(l) or self._form1_re.match(l)
 		if m:
+			applies = False
+
+			ver_no = int(m.group('version_no') or '0')
+			ver_op = m.group('version_op')
+			if ver_op == '>':
+				applies = self._vim_version > ver_no
+			elif ver_op == '=':
+				applies = self._vim_version == ver_no
+			elif ver_op == '<':
+				applies = self._vim_version < ver_no
+			else:
+				applies = self._vim_version >= ver_no
+
+			if not applies:
+				return ret
+
 			for o in re.split(self._option_split_re, m.group('options')):
 				kv = o.split('=', 1)
 				key = kv[0]
