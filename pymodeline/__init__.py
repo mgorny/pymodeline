@@ -26,7 +26,8 @@ Vim modeline parsing module.
 >>> pprint(p.parse_line('<!-- vim:se syntax=python fileencoding=utf8:'))
 {'fileencoding': 'utf8', 'syntax': 'python'}
 >>> pprint(p.parse_line('# vim:se syntax=python fileencoding=utf8'))
-{}
+Traceback (most recent call last):
+KeyError: 'Invalid vim option: se'
 >>> pprint(p.parse_line('vim>0:syntax=perl'))
 {'syntax': 'perl'}
 >>> pprint(p.parse_line('vi>0:syntax=perl'))
@@ -145,7 +146,7 @@ class ModelineParser(object):
 
 		return ret
 
-	_form1_re = re.compile(r'''
+	_modeline_re = re.compile(r'''
 		^
 
 		(?:
@@ -170,53 +171,27 @@ class ModelineParser(object):
 		# an optional whitespace.
 		\s*
 
-		# but no 'se' or 'set' as that would engage form2 matching.
-		# we need to check that explicitly to avoid treating
-		# unterminated form2 as form1.
-		(?! se t? \s)
-
-		# the remaining part of the line contains options then.
-		(?P<options> .* )
-
-		$
-	''', re.VERBOSE)
-
-	_form2_re = re.compile(r'''
-		^
-
-		(?:
-			# vi: or vim: either on start-of-line or following
-			# whitespace.
-			(?: .*? \s+ )?
-			(?: vi (?P<has_vim> m )? )
-
-			# or ex: following whitespace.
-			| .*? \s+ ex
-		)
-
-		# optionally, a version requirement
-		# but only for 'vim'
-		(?(has_vim)
-			(?P<version_op> [<=>] )?
-			(?P<version_no> \d* )
-		)
-
-		:
-
-		# an optional whitespace.
-		\s*
-
-		se t?
-
-		\s+
+		# if it's form2, we need 'set ' or 'se '.
+		(?P<form2>
+			se t? \s+
+		)?
 
 		# the remaining part of the line contains options then.
 		(?P<options>
-			(?: [^:] | : (?<= \\ ) )+
+			(?(form2)
+				(?: [^:] | : (?<= \\ ) )+
+			|
+				.*
+			)
 		)
 
-		# and they *must* end with a :
-		:
+		(?(form2)
+			# form2 options must be terminated with :.
+			:
+		|
+			# form1 options go to EOL.
+			$
+		)
 	''', re.VERBOSE)
 
 	# it can be common to both forms since in form2 unescaped :
@@ -240,7 +215,7 @@ class ModelineParser(object):
 
 		ret = ModelineDict()
 
-		m = self._form2_re.match(l) or self._form1_re.match(l)
+		m = self._modeline_re.match(l)
 		if m:
 			applies = False
 
